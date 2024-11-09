@@ -1,0 +1,395 @@
+---
+title: "Raport 4"
+author: "Magdalena Potok"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(MASS)
+set.seed(1)
+```
+
+## Zadanie 1
+
+__(a)__ Wygeneruję macierz $X_{100\times2}$ taką, że jej wiersze będą niezależnymi wektorami losowymi z wielowymiarowego rozkłau normalnego $N(0,\Sigma/100)$, gdzie $\Sigma = \begin{bmatrix}
+1 & 0.9 \\
+0.9 & 1 \\
+\end{bmatrix}$. 
+
+```{r}
+Sigma <- matrix(c(1, 0.9, 0.9, 1), nrow = 2, byrow = TRUE)
+X <- mvrnorm(n= 100, c(0,0), Sigma = Sigma/100)
+```
+Pierwsza kolumna macierzy $X$ w tym kodzie, to regresor $X_1$, natomiast druga kolumna to $X_2$. Teraz wygeneruję wektor zmiennej odpowiedzi postaci $Y = \beta_1X_1 + \epsilon$, gdzie $\beta_1 = 3$, $\epsilon \sim N(0, I)$.
+```{r}
+X1 <- X[,1]
+epsilon <- rnorm(100, 0, 1)
+Y <- 3*X1 + epsilon
+```
+__(b)__ Wyznaczę 95% przedział ufności dla wartości $\beta_1$ i przeprowadzę $t$-test na poziomie istotności $0.5$ dla hipotezy $\beta_1 = 0$, przy użyciu  
+- modelu prostej regresji liniowej $Y = \beta_0 + \beta_1X_1 + \epsilon$,  
+- modelu z dwiema zmiennymi objaśniającymi $Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + \epsilon$.
+
+```{r, echo = FALSE}
+X2 <- X[,2]
+model1 <- lm(Y~X1)
+model2 <- lm(Y~X1+ X2)
+# Obliczenie przedziałów ufności dla modelu 1
+conf_intervals_model1 <- confint(model1)
+
+# Obliczenie przedziałów ufności dla modelu 2
+conf_intervals_model2 <- confint(model2)
+
+# Wyliczenie wartości krytycznych dla 95% poziomu ufności
+critical_value1 <- qt(0.975, df = nrow(model1$model) - length(model1$coefficients))
+
+
+critical_value2 <- qt(0.975, df = nrow(model1$model) - length(model2$coefficients))
+
+# Obliczenie statystyki t i wyniku testu t-studenta dla modelu 1
+t_stat_model1 <- summary(model1)$coefficients[, "t value"]
+t_test_result_model1 <- t_stat_model1 > critical_value1
+
+# Obliczenie statystyki t i wyniku testu t-studenta dla modelu 2
+t_stat_model2 <- summary(model2)$coefficients[, "t value"]
+t_test_result_model2 <- t_stat_model2 > critical_value2
+
+# Utworzenie tabeli
+results_table <- data.frame(
+  LPU = round(c(conf_intervals_model1["X1",1], conf_intervals_model2["X1",1]),3),
+  PPU = round(c(conf_intervals_model1["X1",2], conf_intervals_model2["X1",2]),3),
+  Wartość_krytyczna = round(c(critical_value1, critical_value2 ),3),
+  T_Statystyka = round(c(t_stat_model1["X1"], t_stat_model2["X1"]),3),
+  T_test_wynik = c(t_test_result_model1["X1"], t_test_result_model2["X1"])
+)
+
+# Nadanie nazw wierszom
+rownames(results_table) <- c("Model 1", "Model 2")
+
+# Wyświetlenie tabeli
+knitr::kable(results_table)
+
+```
+
+Oba przedziały ufności zawierają prawdziwą wartość $\beta_1 = 3$, jednak dla modelu 2 ten przedział jest znacznie szerszy. Wynika to z tego, że drugi mode4l zawiera dodatkową zmienną $X_2$, co może wpływać na relację między $X_1$ a zmienną objaśnianą $Y$. Dodatkowa zmienna wprowadza zmienność, która ma wpływ na szersze prziały ufności. W przypadku 1. modelu na poziomie istotności $\alpha = 0.05$ odrzucamy hipotezę zerową o braku korealcji między $Y$ i $X_1$, jednak w przypadku 2. modelu nie mamy podstaw aby odrzucić tę hipotezę. Dodanie zmiennej $X_2$ wpływa na statystykę $t$-studenta dla współczynnika $X_1$, przez co w drugim modelu wyszła ona niższa od wartości krytycznej.  
+ __(c)__ Obliczę ręcznie odchylenie standardowe estymatora $\beta_1$ i moc identyfikacji $X_1$ w obu modelach.
+$$s^2(\hat{\beta_1}) = \sigma^2(X'X),$$
+gdzie $\sigma^2$ to odchylenie standardowe błędów losowych, tutaj wynosi $1$, a $X$ to macierz, która składa się w pierwszej kolumnie z samych $1$, druga kolumna to $X_1$, a trzecia $X_2$.  
+
+
+```{r}
+MX1 <- cbind(1, X1)
+s1 <- ((solve(t(MX1) %*% MX1))^(1/2))[2,2] 
+MX2 <- cbind(1,X1,X2)
+s2 <- ((solve(t(MX2) %*% MX2))^(1/2))[3,3]
+```
+
+Mod identyfikacji $X_1$, to moc testu dla powyżej przeprowadzonego testu $t$-studenta
+$$Moc \ testu = P_{\beta_1 = 3}(|T| > t_c) = P_{\beta_1 = 3}(T < -t_c) + P_{\beta_1 = 3}(T > t_c) = P_{\beta_1 = 3}(T < -t_c) + 1 - P_{\beta_1 = 3}(T < t_c)$$
+Statystyka T ma niecentralny rozkład studenta z parametrem przesunięcia $ncp = \frac{\beta_1}{{s(\hat{\beta_1})}}$.
+
+```{r}
+moc1 <- pt(-qt(1-0.05/2, length(X1)-2), length(X1) - 2, 3/s1) + 1 -
+  pt(qt(1-0.05/2, length(X1)-2), length(X1) - 2, 3/s1)
+moc2 <- pt(-qt(1-0.05/2, length(X1)-3), length(X1) - 3, 3/s2) + 1 -
+  pt(qt(1-0.05/2, length(X1)-3), length(X1) - 3, 3/s2)
+```
+
+```{r, echo= FALSE}
+
+results <- data.frame(
+  Odchylenie_stand = round(c(s1,s2),3),
+  Moc_testu = round(c(moc1,moc2),3)
+  
+
+)
+
+rownames(results) <- c("Model 1", "Model 2")
+
+knitr::kable(results)
+
+```
+
+Moc testu dla modelu z jedną zmienną objaśniającą jest zadowalający, czyli test jest dobry w wykrywaniu fałszywej hipotezy zerowej. Dla drugiego modelu ten wynik jest znacząco niższy, czyli prawdopodobieństwo odrzucenia $H_0$, gdy rzeczywiście jest fałszywa jest niskie.   
+Większe odchylenie dla drugiego modelu oznacza, że precyzja naszej estymacji współczynnika nachylenia $X_1$ jest niższe niż dla modelu 1. Wyższy wynik oznacza większą zmienność lub rozproszenie estymacji, dodatkowa zmienność może być spowodowana dodaniem drugiej zmiennej.
+
+__(d)__ Wygeneruję $1000$ niezależnych kopii wektora błędów losowych $\epsilon$ i $1000$ odpowiednich kopii wektora zmiennej odpowiedzi. Dla każdego ze zbiorów wyznaczę estymator $\beta_1$ i wykonam test istotności dla $\beta_1$ w obu modelach. Wyestymuję odchylenie standardowe $\beta_1$ oraz moc testu. 
+
+```{r, echo = FALSE}
+
+l1 = 0
+l2 = 0
+
+m1_odch = c()
+m2_odch = c()
+
+
+for(i in 1:1000){
+  e = rnorm(100,0,1)
+  Y = 3*X[,1] + e
+  m1 = lm(Y~X[,1])
+  m2 = lm(Y~X[,1]+X[,2])
+  i1=confint(m1)[2,]
+  i2=confint(m2)[2,]
+  if(0>=i1[1] && i1[2] >= 0)
+  {
+    l1 = l1 +1
+  }
+  if(0>=i2[1] && i2[2] >= 0)
+  {
+    l2 = l2 +1
+  }
+  
+  m1_odch = c(m1_odch, m1$coefficients[2])
+  m2_odch = c(m2_odch, m2$coefficients[2])
+  
+}
+moc1 =1- l1/1000
+moc2 = 1 - l2/1000
+s1 = sd(m1_odch)
+s2 = sd(m2_odch)
+
+results <- data.frame(
+  Odchylenie_stand = round(c(s1,s2),3),
+  Moc_testu = round(c(moc1,moc2),3)
+  
+
+)
+
+rownames(results) <- c("Model 1", "Model 2")
+
+knitr::kable(results)
+
+```
+Wyniki doświadczalne oraz teoretyczne (podpunkt c) są sobie bardzo bliskie, co jest spodziewanym wynikiem przy tak wielu powtórzeniach. 
+
+
+## Zadanie 2
+
+__(a)__ Wygeneruję macierz planu $\mathbb{X}_{1000\times950}$ tak, że jej elementy są niezależnymi zmiennymi losowymi z rozkładu normalnego $N(0, \sigma = 0.1)$. Następnie wygeneruję wektor zmiennej odpowiedzi według modelu $$Y = \mathbb{X}\beta + \epsilon,$$
+gdzie $\beta = (3,3,3,3,3,0,...,0)^T$.
+
+```{r}
+X <- matrix(rnorm(950000, 0, 0.1), nrow = 1000)
+beta <- rep(0, 950)
+beta[1:5] <- 3
+Y <- X%*%beta+rnorm(1000)
+```
+
+Oznacza to, że $X_1, X_2, X_3, X_4, X_5$ będą miały wpływ na model, a pozostałe $X_i$ będą wymnażane przez $\beta_i = 0$.
+
+__(b)__ Wyestymuje wartości współczynników regresji i wykonam $t$-testy na poziomie istotności $0.05$, aby zidentyfikować istotne regresory, gdy model jest zbudowany przy użyciu pierwszych $k$ kolumn macierzy planu dla $k \in \{1,2,5,10,50,100,500,950\}$. Dla każdego z tych modeli podam:  
+- sumę kwadratów residów $SSE = \|Y - \hat{Y} \|^2;$  
+- błąd średniokwadratowy estymatora wartości oczekiwanej $Y: \ MSE = \|X(\hat{\beta} - \beta) \|^2$;  
+- wartość kryterium AIC: $AIC = nlog(SSE/n) + 2k$;  
+- p-wartości dla dwóch pierwszych zmiennych objaśniających;  
+- liczbę fałszywych odkryć.  
+
+```{r, echo = FALSE}
+
+rm(list=ls())
+set.seed(8)
+
+n <- 1000
+k <- 950
+alpha <- 0.05
+
+X.mat <- matrix(rnorm(n*k, sd = 0.1), nrow=n, ncol=k)
+Y.vec <- apply(3 * X.mat[, 1:5], 1, sum) + rnorm(n)
+X.names <- paste0("X", 1:k)
+data <- as.data.frame(cbind(Y.vec, X.mat))
+colnames(data) <- c("Y", X.names)
+
+
+possible.var <- c(1, 2, 5, 10, 50, 100, 500, 950)
+n.possible.var <- length(possible.var)
+
+result.info.df <- data.frame("SSE"=rep(0, times=n.possible.var), "MSE"=0, "AIC"=0, 
+                             "P.value.1"=0, "P.value.2"=0, "FD"=0)
+rownames(result.info.df) = as.character(possible.var)
+
+for (i in 1:n.possible.var){
+  n.var <- possible.var[i]
+  formula.txt <- paste("Y~", paste(X.names[1:n.var], collapse="+"), "-1")
+  tmp.model <- lm(as.formula(formula.txt), data=data)
+  tmp.model.summary <- summary(tmp.model)
+  result.info.df[i, "SSE"] <- sum(tmp.model$residuals^2)
+  result.info.df[i, "MSE"] <- result.info.df[i, "SSE"] / (n-n.var-1)
+  result.info.df[i, "AIC"] <- n * log(result.info.df[i, "SSE"] / n) + 2 * (n.var-1)
+  result.info.df[i, "P.value.1"] <- tmp.model.summary$coefficients[1, 4]
+  if (n.var == 1){
+    result.info.df[i, "P.value.2"] <- NA
+  } else {
+    result.info.df[i, "P.value.2"] <- tmp.model.summary$coefficients[2, 4]
+  }
+  if (n.var >= 6){
+    result.info.df[i, "FD"] <- 
+      sum(tmp.model.summary$coefficients[6:n.var, 4] < alpha)
+  } else {
+    result.info.df[i, "FD"] <- NA
+  }
+}
+
+
+
+
+# Wyświetlenie tabeli
+knitr::kable(round(result.info.df,3))
+
+```
+
+Analiza wyników przedstawia istotne obserwacje dotyczące różnych wskaźników modelu regresji. Suma kwadratów błędów predykcji (SSE) wykazuje tendencję do wzrostu w miarę zmniejszania liczby zmiennych objaśniających ($X_i$). Model pełny, wykorzystujący wszystkie zmienne, charakteryzuje się najniższym SSE, co sugeruje, że jego predykcje są najbliższe wartościom obserwowanym.  
+Natomiast średni kwadratowy błąd predykcji (MSE) utrzymuje się na stosunkowo stabilnym poziomie, niezależnie od liczby zmiennych objaśniających w modelu. To wskazuje, że MSE nie zmienia się znacząco wraz ze zmianą $X_i$.  
+Wartość kryterium AIC (Akaike's Information Criterion) służy do porównania różnych modeli, a niższa dodatnia wartość AIC wskazuje na lepsze dopasowanie modelu do danych. Model z 5 zmiennymi objaśniającymi osiągnął najniższy AIC, co sugeruje, że najlepiej odwzorowuje zależności w danych. Natomiast model pełny miał wartość ujemną AIC, co może wskazywać na zbyt dobrze dopasowany model.  
+Analiza P-wartości pokazuje, że w większości przypadków hipotezy zerowe są odrzucane (dla P-wartości_i < $\alpha$). Warto jednak zauważyć, że nawet dla modelu, w którym nie można odrzucić $H_0$ (P-wartość_1 > $\alpha$), istnieje istotność drugiej zmiennej (P-wartość_2 < $\alpha$). Wiersze z wartościami 'NA' wskazują, że te konkretne zmienne nie są uwzględnione w danym modelu.  
+Ostatnia kolumna, dotycząca liczby wyników fałszywie pozytywnych (FD), rośnie wraz ze wzrostem liczby zmiennych objaśniających. Wartości 'NA' w trzech pierwszych wierszach sygnalizują, że te zmienne nie są uwzględnione, co sugeruje brak fałszywych wyników odkryć dla modelu z 5 zmiennymi objaśniającymi, które rzeczywiście mają wpływ na zmienną objaśnianą.  
+
+__(c)__ Powtórzę punkt (b), gdy modele są konstruowane przy pomocy zmiennych o największych (niekoniecznie pierwszych) estymowanych współczynnikach regresji.  
+
+```{r, echo = FALSE, message = FALSE, error = FALSE, warning = FALSE }
+library(latex2exp)
+library(magrittr)
+library(dplyr)
+
+
+model.full <- lm(Y~.-1, data=data)
+model.full.summary <- summary(model.full)
+coeff.full <- as.data.frame(model.full.summary$coefficients) %>%
+  arrange(desc(Estimate))
+X.names.order <- rownames(coeff.full)
+
+not.signif <- X.names[6:length(X.names)]
+
+result.info.df.c <- data.frame("SSE"=rep(0, times=n.possible.var), "MSE"=0, "AIC"=0, 
+                               "P.value.1"=0, "P.value.2"=0, "FD"=0)
+rownames(result.info.df.c) = as.character(possible.var)
+
+for (i in 1:n.possible.var){
+  n.var <- possible.var[i]
+  X.current <- X.names.order[1:n.var]
+  formula.txt <- paste("Y~", paste(X.names.order[1:n.var], collapse="+"), "-1")
+  tmp.model <- lm(as.formula(formula.txt), data=data)
+  tmp.model.summary <- summary(tmp.model)
+  result.info.df.c[i, "SSE"] <- sum(tmp.model$residuals^2)
+  result.info.df.c[i, "MSE"] <- result.info.df.c[i, "SSE"] / (n-n.var-1)
+  result.info.df.c[i, "AIC"] <- n * log(result.info.df.c[i, "SSE"] / n) + 2 * (n.var-1)
+  result.info.df.c[i, "P.value.1"] <- tmp.model.summary$coefficients[1, 4]
+  if (n.var==1){
+    result.info.df.c[i, "P.value.2"] <- NA
+  } else {
+    result.info.df.c[i, "P.value.2"] <- tmp.model.summary$coefficients[2, 4]
+  }
+  false.X <- sum(X.current %in% not.signif)
+  false.discoveries <- 
+    sum(tmp.model.summary$coefficients[which(X.current %in% not.signif), 4] < alpha)
+  if (false.X <= 0){
+    result.info.df.c[i, "FD"] <- 0
+  } else {
+    result.info.df.c[i, "FD"] <- false.discoveries
+  }
+}
+
+
+knitr::kable(round(result.info.df.c, 3))
+
+
+```
+
+Analiza porównawcza dwóch zestawów wyników modeli regresji wskazuje na podobne trendy w zależności od liczby zmiennych objaśniających. W obu zestawach obserwujemy spadek zarówno sumy kwadratów błędów predykcji (SSE) jak i średniego kwadratowego błędu (MSE) w miarę zmniejszania liczby zmiennych objaśniających. Zestawienia te pokazują również spadek wartości kryterium AIC wraz z redukcją zmiennych, gdzie modele z pięcioma zmiennymi objaśniającymi osiągają (prawie )najniższe wartości AIC, sugerując ich najlepsze dopasowanie do danych. Wartości P-wartości również maleją wraz ze zmniejszeniem liczby zmiennych, co wskazuje na istotność statystyczną zmiennych, zwłaszcza dla mniejszych modeli. Obserwujemy wzrost liczby fałszywie pozytywnych wyników (FD) wraz z dodawaniem zmiennych objaśniających, przy czym modele z mniejszą liczbą zmiennych wykazują brak fałszywych wyników odkryć. Oba zestawy danych prezentują spójne wnioski, że modele z pięcioma zmiennymi objaśniającymi wykazują najlepsze dopasowanie do danych, biorąc pod uwagę równowagę między precyzją a złożonością modelu. Gdybyśmy mieli wskazać dla tego podpunktu, który model wybrać jedynie na podstawie AIC, to byłby to model z 10 zmiennymi objaśniającymi, ponieważ to właśnie on ma najmniejszą dodatnią wartość AIC.
+
+__(d)__ Powórzę generowanie $\epsilon$ i Y oraz punkty (b) i (c) 50 razy. Dla każdego z zadań obliczę moc identyfikacji $X_1, X_2$ i średnią liczbę fałszywych odkryć. Dodatkowo oszacuję średni rozmiar modelu wybranego przez AIC dla punktów (b) i (c).
+
+
+```{r, echo = FALSE}
+
+f.d.b.rep <- rep(0, 8)
+AIC.b.rep <- rep(0, 8)
+power.b.rep <- rep(0, 8)
+f.d.c.rep <- rep(0, 8)
+AIC.c.rep <- rep(0, 8)
+power.c.rep <- rep(0, 8)
+
+repeats <- 20
+contain.X1 <- rep(0, 8)
+
+
+for (i in 1:repeats){
+  
+  X <- matrix(rnorm(n*k, sd=0.1), nrow=n, ncol=k)
+  Y <- apply(3*X[, 1:5], 1, sum) + rnorm(n)
+  X.names <- paste0("X", 1:k)
+  data <- as.data.frame(cbind(Y, X))
+  colnames(data) <- c("Y", X.names)
+  
+  for (j in 1:n.possible.var){
+    n.var <- possible.var[j]
+    formula.txt <- paste("Y~", paste(X.names[1:n.var], collapse="+"), "-1")
+    tmp.model.d <- lm(as.formula(formula.txt), data=data)
+    tmp.model.d.summary <- summary(tmp.model.d)
+    AIC.b.rep[j] = AIC.b.rep[j] + n * log(sum(tmp.model.d$residuals^2) / n) + 2 * (n.var-1)
+    if (n.var >= 6){
+      f.d.b.rep[j] = f.d.b.rep[j] + sum(tmp.model.d.summary$coefficients[6:n.var, 4] < alpha)
+    }
+    power.b.rep[j] = power.b.rep[j] + (tmp.model.d.summary$coefficients[1, 4] < alpha)
+  }
+  
+  model.full.d <- lm(Y~.-1, data=data)
+  model.full.d.summary <- summary(model.full.d)
+  coeff.full.d <- as.data.frame(model.full.d.summary$coefficients) %>% arrange(desc(Estimate))
+  X.names.order.d <- rownames(coeff.full.d)
+  for (j in 1:n.possible.var){
+    n.var <- possible.var[j]
+    X.current <- X.names.order.d[1:n.var]
+    formula.txt <- paste("Y~", paste(X.names.order.d[1:n.var], collapse="+"), "-1")
+    tmp.model.dc <- lm(as.formula(formula.txt), data=data)
+    tmp.model.dc.summary <- summary(tmp.model.dc)
+    AIC.c.rep[j] = AIC.c.rep[j] + n * log(sum(tmp.model.dc$residuals^2) / n) + 2 * (n.var-1)
+    false.X <- sum(X.current %in% not.signif)
+    false.discoveries <- 
+      sum(tmp.model.dc.summary$coefficients[which(X.current %in% not.signif), 4] < alpha)
+    if (false.X > 0){
+      f.d.c.rep[j] = f.d.c.rep[j] + false.discoveries
+    }
+    if ("X1" %in% X.current){
+      contain.X1[j] = contain.X1[j] + 1
+      power.c.rep[j] = power.c.rep[j] + (tmp.model.dc.summary$coefficients["X1", 4] < alpha)
+    }
+  }
+}
+
+
+AIC.b.avg <- AIC.b.rep / repeats
+f.d.b.avg <- f.d.b.rep / repeats
+power.b.avg <- power.b.rep / repeats
+
+AIC.c.avg <- AIC.c.rep / repeats
+f.d.c.avg <- f.d.c.rep / repeats
+power.c.avg <- power.c.rep / contain.X1
+
+AICs <- rbind(AIC.b.avg, AIC.c.avg)
+f.ds <- rbind(f.d.b.avg, f.d.c.avg)
+powers <- rbind(power.b.avg, power.c.avg)
+
+tabela <- as.data.frame(rbind(AICs, f.ds, powers))
+rownames(tabela) = c("AIC(b)", "AIC(c)", "FD(b)", "FD(c)", "Moc(b)", "Moc(c)")
+colnames(tabela) = as.character(possible.var)
+
+
+knitr::kable(round(tabela, 3))
+
+```
+
+Analiza wyników wskazuje na istotne różnice pomiędzy strategiami wyboru modeli w zależności od liczby zmiennych objaśniających. W przypadku (b), dla 50 powtórzeń, model z 5 zmiennymi (X1, X2, X3, X4, X5) charakteryzuje się najniższym średnim AIC, co jest zgodne z pojedynczym wyliczeniem. Natomiast w (c), model z 100 zmiennymi objaśniającymi wskazuje najniższą średnią wartość AIC, podczas gdy przy pojedynczym obliczeniu najlepszy był model z 10 zmiennymi. Zmiana ta wynika z różnic w uporządkowaniu zmiennych X1, X2, X3, X4, X5 względem wpływu na Y w kolejnych wygenerowanych zestawach danych. Warto zauważyć, że AIC dla poszczególnych liczb zmiennych ma większy rozrzut w (b) niż w (c). Liczba fałszywych odkryć (FD) rośnie wraz z liczbą zmiennych w obu przypadkach, choć nieznacznie więcej występuje ich w (c). Moc, która wskazuje na błędne nieodrzucenie hipotezy zerowej, osiąga maksymalną wartość (1) dla większości modeli z wyjątkiem modelu pełnego, gdzie wynosi 0.450. Średnia moc jest zgodna z informacją z P-wartości, sugerując odrzucenie hipotez zerowych poza modelem pełnym, gdzie nieodrzucenie tych hipotez może wystąpić częściej.
+
+
+
+
+
+
+
+
+
+
+
+

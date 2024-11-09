@@ -1,0 +1,910 @@
+---
+title: "Raport 3"
+author: "Magdalena Potok"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+set.seed(1)
+library(ggplot2)
+library(knitr)
+library(MASS)
+library(cowplot)
+
+```
+
+## Zadanie 1
+
+Do zadania zostały użyte dane z pliku tabela1_6.txt, które zawierają średnią ocen (GPA), wynik w standardowym teście IQ, płeć oraz punktacje na teście psychologicznym Piers-Harris Children's Self -Concept Scale.   
+
+__(a)__  
+Użyję prostego modelu regresji do opisania zależności GPA od wyników testu IQ. 
+
+```{r, echo = FALSE}
+
+t <- read.table("C:/Users/Madzia/Desktop/Modele liniowe/Raport 3/tabela1_6 (1).txt")
+colnames(t) <- c("nr","GPA","IQ","Plec","PH")
+model1 <- lm(GPA~IQ, t)
+n <- 78
+Fc <- qf(1-0.05, 1, n-2)
+summ1 <- summary(model1)
+
+```
+Z podsumowania modelu można odczytać, że: 
+
+- $\hat\beta_1 =$ `r round(summ1$coefficients[2,1], 3)`
+- $\hat\beta_0 =$ `r round(summ1$coefficients[1,1], 3)`
+
+Zatem równanie regresji wygląda tak: $Y = 0.101 * X - 3.557$.  
+
+Dane oraz prosta regresji na wykresie wyglądają tak:  
+
+```{r, echo = FALSE, fig.height = 4, message = FALSE}
+equation <- paste("Y =", round(summ1$coefficients[2, 1], 3), "* X", ifelse(round(summ1$coefficients[1,1], 3) >= 0, "+", "-"), abs(round(summ1$coefficients[1,1], 3)))
+
+ggplot(t, aes(x = IQ, y = GPA)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Regresja liniowa: GPA ~ IQ", x = "IQ", y = "GPA") +
+  annotate("text", x = max(t$IQ), y = min(t$GPA), label = equation, hjust = 1)+
+  theme_minimal()
+
+```
+
+Wykres przedstawia zależność GPA od wyników testu IQ. Na dane została nałożona prosta, która jest dopasowaną do danych prostą regresji.  
+
+Policzę teraz współczynnik determinacji $R^2$, aby zrobić to za pomocą wzorów teoretycznych należy policzyć:
+$$R^2 = 1 - \frac{\sum\limits_{i=1}^n(Y_i-\hat{Y}_i)^2}{\sum\limits_{i=1}^n(Y_i-\bar{Y})^2}$$
+```{r,echo = FALSE}
+x <- t$IQ
+y <- t$GPA
+n <- length(x)
+Beta1 <- sum((x - mean(x)) * (y - mean(y))) / sum((x - mean(x))^2)
+Beta0 <- mean(y) - Beta1 * mean(x)
+```
+```{r}
+(R_squared <- 1 - sum((t$GPA - Beta0 - Beta1 * t$IQ)^2) / sum((t$GPA - mean(t$GPA))^2))
+```
+Można również policzyć tę statystykę za pomocą poleceń wbudowanych w R.
+```{r}
+summary(model1)$r.squared
+```
+Na podstawie $R^2$ można powiedzieć, że 40% GPA jest wyjaśniane przez IQ.  
+
+__(b)__  
+Przetestuję hiipotezę, że GPA nie jest skorelowane z IQ na podstawie testu F.  
+$$H_0 : \beta_1 = 0  \ H_1 : \beta_1 \neq 0$$
+Statystyka testowa dla testu F wyliczamy za pomocą wzorów teoretycznych w następujący sposób:  
+$$F = \frac{\sum\limits_{i=1}^n(\hat{Y}_i - \bar{Y})^2 \cdot dfE}{\sum\limits_{i=1}^n(Y_i - \hat{Y}_i)^2 \cdot dfM}$$
+Jest to statystyka z rozkładu Fishera dla 1 i $n - 2$ stopni swobody, czyli w naszym przypadku 1 i 76. Odrzucamy hipotezę zerową wtedy, gdy $F > F_c = F^*(1-\alpha,1,n-2)$. Przeprowadzę teraz ten test.
+
+```{r}
+Fc <- qf(1-0.05, 1, n-2)
+F <- sum((Beta0 + Beta1 * t$IQ - mean(t$GPA))^2)*(n-2)/sum((t$GPA - Beta0 - Beta1 * t$IQ)^2)
+F > Fc
+```
+W związku z czym na poziomie istotności $\alpha = 0.05$ odrzucamy hipotezę zerową, co oznacza, że występuje zależność między GPA i IQ.  
+
+Ten sam problem możeby zbadać za pomocą funkcji wbudowanej w R.
+```{r}
+summary(model1)$fstatistic[1] > Fc
+
+```
+I otrzymujemy ten sam wynik.  
+\newline
+Innym sposobem na zbadanie, czy GPA jest skorelowane z IQ jest użycie p-wartości. W przypadku testu F p-wartość jest prawdopodobieństwm uzyskania wartości bardziej ekstremalnych od statystyki F, gdyby hipoteza zerowa była prawdziwa.
+
+$$p-wartość = P(F > F_{statystyka})$$
+```{r}
+(p_value <- 1 - pf(F, 1, 76))
+```
+Odrzucamy $H_0$ gdy $p-value < \alpha$, u nas p-wartość wyszła bardzo mała, bliska zera, zatem jest mniejsza od poziomu istotności $\alpha = 0.05$, zatem odrzucamy $H_0$.  
+P-wartość można również wyliczyć z polecen wbudowanych w R.
+```{r}
+summary(model1)$coefficients["IQ", "Pr(>|t|)"]
+```
+Wynik wychodzi taki sam, jak dla obliczeń teoretycznych.  
+\newline
+__(c)__  
+Przewidzę GPA dla uczniów, których IQ wynosi 75, 100, 140. Podam 90% przedziały predykcyjne.  
+```{r}
+iq_n <- c(75, 100, 140)
+(gpa_s <- Beta0 + Beta1 * iq_n)
+```
+Tyle wynoszą przewidywane wartości średnich ocen, następnie wyznaczę przedziały predykcyjne za pomocą wzoru
+$$[\hat{\mu}_h-t_cs(pred),\ \hat{\mu}_h+t_cs(pred)]$$
+gdzie $s^2(pred) = s^2\Big(1 + \frac{1}{n} + \frac{(X_h-\bar{X})^2}{\sum\limits_{i=1}^n(X_i-\bar{X})^2}\Big)$.  
+```{r, echo = FALSE}
+tc <- qt(1-0.05/2, 76)
+s2 <- 1/76 * sum((y - Beta0 - Beta1 * x)^2)
+s2_pred <- s2 * (1 + 1/78 + ((iq_n - mean(x))^2)/sum((x - mean(x))^2))
+l_pp <- gpa_s - tc * sqrt(s2_pred)
+p_pp <- gpa_s + tc * sqrt(s2_pred)
+
+
+df <- data.frame(Obs = iq_n,
+                 GPA = round(gpa_s, 3),
+                 Lewy_Przedział = round(l_pp, 3),
+                 Prawy_Przedział = round(p_pp, 3))
+
+# Konfiguracja przerw w tabeli
+knitr::kable(df, 
+             col.names = c("IQ", "Przewidywane GPA", "Lewy Przedział", "Prawy Przedział"), 
+             format = "markdown", 
+             align = "c", 
+             col.width = c(100, 100, 100, 100))
+```
+
+__(d)__  
+Do wykresu z podpunktu __(a)__ dodam 90% przedziały predykcyjne.  
+
+
+```{r, echo = FALSE, fig.height = 3.5}
+new_data <- data.frame(IQ = seq(min(t$IQ), max(t$IQ), length.out = 100))
+
+
+predictions <- predict(model1, newdata = new_data, interval = "prediction", level = 0.9)
+
+
+new_data <- cbind(new_data, predictions)
+
+
+ggplot() +
+  geom_point(data = t, aes(x = IQ, y = GPA)) +
+  geom_line(data = new_data, aes(x = IQ, y = fit), color = "blue") +
+  geom_ribbon(data = new_data, aes(x = IQ, ymin = lwr, ymax = upr), alpha = 0.3, fill = "blue") +
+  labs(x = "IQ", y = "GPA") +
+  ggtitle("Wykres danych z przedziałami predykcyjnymi (90%) dla regresji") +
+  theme_minimal()
+
+```
+Z wykresu można odczytać, że z 78 obserwacji jedynie 6 obserwacji wychodzi poza obszar 90% pasma predykcji. Przedziały predykcyjne są dosyć szerokie, wynika to z dużego rozproszenia punktów na wykresie.
+
+## Zadanie 2
+W zadaniu 2 zostały użyte te same dane, co w zadaniu 1.  
+
+__(a)__ 
+Użyję prostego modelu regresji do opisania zależności GPA od wyników testu PH. 
+
+```{r, echo = FALSE}
+model2 <- lm(GPA~PH, t)
+summ2 <- summary(model2)
+
+```
+Z podsumowania modelu można odczytać, że: 
+
+- $\hat\beta_1 =$ `r round(summ2$coefficients[2,1], 3)`
+- $\hat\beta_0 =$ `r round(summ2$coefficients[1,1], 3)`
+Zatem równanie regresji wygląda tak: $Y = 0.092 * X + 2.226$.  
+Prosta regresji oraz dane można przedstawić na wykresie
+
+```{r, echo = FALSE, fig.height = 3.5, message = FALSE}
+equation <- paste("Y =", round(summ2$coefficients[2, 1], 3), "* X", ifelse(round(summ2$coefficients[1,1], 3) >= 0, "+", "-"), abs(round(summ2$coefficients[1,1], 3)))
+
+ggplot(t, aes(x = PH, y = GPA)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Regresja liniowa: GPA ~ PH", x = "PH", y = "GPA") +
+  annotate("text", x = max(t$PH), y = min(t$GPA), label = equation, hjust = 1)+
+  theme_minimal()
+
+```
+Współczynnik determinacji wynosi
+```{r}
+(R_squared <- 1 - sum((t$GPA - round(summ2$coefficients[1,1], 3) - round(summ2$coefficients[2,1], 3) * t$PH)^2) / sum((t$GPA - mean(t$GPA))^2))
+```
+Można również policzyć tę statystykę za pomocą poleceń wbudowanych w R.
+```{r}
+summary(model2)$r.squared
+```
+Na podstawie $R^2$ można powiedzieć, że 29% GPA jest wyjaśniane przez PH.  
+
+__(b)__
+Przetestuję hipotezę, że GPA nie jest skorelowane z PH na podstawie testu F.  
+$$H_0 : \beta_1 = 0  \ H_1 : \beta_1 \neq 0$$
+Do przetestowania hipotezy, tak jak w zadaniu 1., potrzebujemy statystyki F z rozkładu Fishera dla 1 i $n - 2$ stopni swobody, czyli w naszym przypadku 1 i 76. Odrzucamy hipotezę zerową wtedy, gdy $F > F_c = F^*(1-\alpha,1,n-2)$. Przeprowadzę teraz ten test.
+```{r}
+summary(model2)$fstatistic[1] > Fc
+```
+Statystyka F wyszła około 31.59, a wartość krytyczna 3.97, zatem na poziomie istotnosci $\alpha = 0.05$ odrzucamy hipotezę zerową i są skorelowane.  
+Policzę teraz p-wartość.
+```{r}
+summary(model2)$coefficients["PH", "Pr(>|t|)"]
+```
+Ta wartość jest bardzo mała, zatem na pewno mniejsza od 0.05, ten test również uzasadnił, że GPA i PH są skorelowane.  
+
+__(c)__
+Przewidzę GPA dla uczniów, których PH wynosi 25, 55, 85. Podam 90% przedziały predykcyjne.  
+```{r, echo = FALSE}
+ph_n <- c(25, 55, 85)
+(gpa_s <- round(summ2$coefficients[1,1],3) + round(summ2$coefficients[2,1], 3) * ph_n)
+```
+Tyle wynoszą przewidywane wartości średnich ocen, następnie wyznaczę przedziały predykcyjne. 
+```{r, echo = FALSE}
+tc <- qt(1-0.05/2, 76)
+x <- t$PH
+s2 <- 1/76 * sum((y - round(summ2$coefficients[1,1],3) - round(summ2$coefficients[2,1], 3) * x)^2)
+s2_pred <- s2 * (1 + 1/78 + ((ph_n - mean(x))^2)/sum((x - mean(x))^2))
+l_pp <- gpa_s - tc * sqrt(s2_pred)
+p_pp <- gpa_s + tc * sqrt(s2_pred)
+
+
+
+df <- data.frame(ph =  ph_n,
+                 gpa = round(gpa_s,3),
+                 lewy = round(l_pp,3),
+                 prawy = round(p_pp,3))
+knitr::kable(df, 
+             col.names = c("PH", "Przewidywane GPA", "Lewy Przedział", "Prawy Przedział"), 
+             format = "markdown", 
+             align = "c", 
+             col.width = c(100, 100, 100, 100))
+```
+
+__(d)__  
+Do wykresu z podpunktu __(a)__ dodam 90% przedziały predykcyjne.  
+
+
+```{r, echo = FALSE, fig.height = 3.5}
+new_data <- data.frame(PH = seq(min(t$PH), max(t$PH), length.out = 100))
+
+
+predictions <- predict(model2, newdata = new_data, interval = "prediction", level = 0.9)
+
+
+new_data <- cbind(new_data, predictions)
+
+
+ggplot() +
+  geom_point(data = t, aes(x = PH, y = GPA)) +
+  geom_line(data = new_data, aes(x = PH, y = fit), color = "blue") +
+  geom_ribbon(data = new_data, aes(x = PH, ymin = lwr, ymax = upr), alpha = 0.3, fill = "blue") +
+  labs(x = "PH", y = "GPA") +
+  ggtitle("Wykres danych z przedziałami predykcyjnymi (90%) dla regresji") +
+  theme_minimal()
+
+```
+
+Poza przedziałami predykcyjnymi znajduje się 6 obserwacji, tak samo, jak w przypadku zadania 1. Również przedział predykcyjne są całkiem szerokie, z tego samego powodu, co w zadaniu 1.
+
+__(e)__   
+Współczynnik determinacji $R^2$ mierzy stopień, w jakim zmienność zmiennej zależnej (w naszym przypadku GPA) jest wyjaśniana przez zmienne niezależne (IQ lub PH) w modelu regresji. Im bliżej $R^2$ do 1, tym lepiej model pasuje do danych i lepiej wyjaśnia zmienność zmiennej objaśnianej. W naszym przypadku dla IQ $R^2 = 0.4$, natomiast dla PH $R^2 = 0.29$. Zatem IQ ma większy wpływ na predykcję wartości GPA i jest lepszym predyktorem.
+
+## Zadanie 3
+
+W tym zadaniu zostaną wykorzystane dane z pliku **ch01pr20.txt**, który zawiera liczbę kopiarek oraz czas (w godzinach) potrzebny na utrzymanie tych kopiarek.  
+
+__(a)__ Sprawdzę ile wynosi suma residuów.  
+
+```{r, echo = FALSE}
+
+dane2 <- read.table("C:/Users/Madzia/Desktop/Modele liniowe/Raport 3/CH01PR20 (2).txt")
+colnames(dane2) <- c("czas", "kopiarki")
+liczba <- dane2$czas
+model2 <- lm(czas ~ kopiarki, dane2)
+residua <- summary(model2)$residuals
+sum(residua)
+
+```
+Suma reszt w modelu liniowym wynosi `r sum(model2$residuals)` $\approx$ `r round(sum(model2$residuals), 3)`, co jest wynikiem bardzo bliskim i przybliżanym do 0.  
+
+__(b)__ Przeddstawię wykres residuów względem zmiennej objaśniającej.  
+
+```{r, echo = FALSE, fig.height = 3}
+e <- model2$residuals
+
+
+ggplot(data = dane2)+
+  geom_point(aes(x = kopiarki, y = e), col = 'black') +
+  xlab("Liczba kopiarek") + ylab("Residua") +
+  ggtitle("Wykres zależności residuów od liczby kopiarek") +
+  theme_minimal()
+```
+Każdy punkt na wykresie to osobna obserwacja, a odległość punktu od poziomej linii (y = 0) pokazuje jak zła byłą predykcja dla konkretnej obserwacji. Można zauważyć, że najwięcej punktów znajduje się w okolicy 0 oraz, że są one w miarę symetrycznie rozłożone wokół prostej $y = 0$. W związku z tymi cechami suma residuów jest bliska 0. Nietypowymi punktami są punkty oddalone o 20 (na poziomie y = -20) od 0, ale jest to zrównoważone ilością punktów, które są oddalone o 10, jest ich znacznie więcej.  
+
+__(c)__ Przedstawię wykres residuów względem kolejności, w jakiej dane pojawiają się w pliku danych.
+
+
+```{r, echo = FALSE, fig.height = 2.7}
+ggplot()+
+  geom_point(aes(x = 1:45, y = e), col = 'black') +
+  xlab("Kolejność") + ylab("Residua") +
+  ggtitle("Wykres zależności residuów od kolejności danych") +
+  theme_minimal()
+```
+
+Wykres pokazuje wielkość reszt w zależności od kolejności dokonywanych obserwacji. Punkty są takie same, jak w poprzednim podpunkcie, tylko teraz obserwujemy, czy wielkość reszt w modelu liniowym zależała od czasu wykonywania pomiaru. Ciężko na tym wykresie wychwycić jakieś wyraźne wzorce, punkty są poukładane przypadkowo, więc można stwierdzić, że residua mają strukturę losową, co oznaczałoby, że błędy losowe są względem siebie niezależne.  
+
+__(d)__ Sprawdzę rozkład residuów za pomocą histogramu i wykresu kwantylo-kwantylowego.  
+```{r, echo = FALSE, message = FALSE, fig.height = 3.5, warning = FALSE}
+
+library(gridExtra)
+hist_plot <- ggplot(data.frame(residuals = e), aes(x = residuals)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 5, fill = "steelblue3", color = "black") +
+  labs(x = "Residua", y = "Gęstość", title = "Histogram residuów") +
+  theme_minimal()
+
+x_seq <- seq(min(e), max(e), length.out = 1000)
+y_density <- dnorm(x_seq, mean(e), sd(e))
+
+density_plot <- geom_line(data = data.frame(x = x_seq, y = y_density), aes(x, y), color = "red", linewidth = 1)
+
+
+qq_plot <- ggplot(data.frame(residuals = e), aes(sample = residuals)) +
+  geom_qq() +
+  geom_abline(intercept = mean(e), slope = sd(e), col = "red", linewidth = 1) +
+  labs(title = "Q-Q Plot") +
+  theme_minimal()
+
+
+grid.arrange(hist_plot + density_plot, qq_plot, ncol = 2)
+```
+Na histogram została nałożona krzywa wyznaczająca teoretyczną gęstość rozkładu normalnego. Większość histogramu znajduje się pod krzywą, co sugeruje nam, że reszt mają zbliżony rozkład do rozkładu normalnego. Wykres prawdopodobieństwa jest prosty i nie ma punktów, które mocna odchylały by się od teoretycznej prostej, co również wskazuje na rozkład normalny residuów.
+
+## Zadanie 4
+Zmodyfikuję dane z pliku **ch01pr20.txt** dodając dodatkową obserwację (1000;2).
+```{r}
+nowa_obserwacja <- data.frame(czas = 1000, kopiarki = 2)
+dane2_n <- rbind(dane2, nowa_obserwacja)
+```
+
+__(a)__ Przeprowadzę regresję ze zmienionymi danymi i utworzę tabelę porównującą wyniki tej analizy z wynikami analizy oryginalnych danych.
+
+```{r, echo = FALSE}
+model2_n <- lm(czas ~ kopiarki, dane2_n)
+
+summary_model2_n <- summary(model2_n)
+summary_model2 <- summary(model2)
+
+# Dopasowane równania regresji
+equations <- c(
+  paste("Y =", 
+        round(summary_model2_n$coefficients[1, "Estimate"], 3),
+        "+",
+        "X *",
+        round(summary_model2_n$coefficients[2, "Estimate"], 3)),
+  paste("Y =", 
+        round(summary_model2$coefficients[1, "Estimate"], 3),
+        "+",
+        "X *",
+        round(summary_model2$coefficients[2, "Estimate"], 3))
+)
+
+# T-test dla współczynnika nachylenia z p-wartością
+t_test_values <- c(
+  summary_model2_n$coefficients[2, c("t value")],
+  summary_model2$coefficients[2, c("t value")]
+)
+
+p_wartosc <- c(
+  summary_model2_n$coefficients[2, c("Pr(>|t|)")],
+  summary_model2$coefficients[2, c("Pr(>|t|)")]
+)
+
+# R-kwadrat
+r_squared <- c(
+  summary_model2_n$r.squared,
+  summary_model2$r.squared
+)
+
+# Estymator sigma^2 (residual standard error)
+sigma_squared <- c(
+  summary_model2_n$sigma,
+  summary_model2$sigma
+)
+
+# Tworzenie tabeli
+comparison_table <- data.frame(
+  Model = c("Zmodyfikowany model", "Stary model"),
+  `Dopasowane równanie regresji` = equations,
+  
+  `p-wartość` = round(p_wartosc, 3),
+  `R-kwadrat` = round(as.numeric(r_squared),3),
+  `Estymator sigma^2` = round(as.numeric(sigma_squared),3),
+  row.names = NULL
+)
+
+# Wyświetlenie tabeli
+knitr::kable(comparison_table, align = "c")
+
+
+```
+Można zaobserwować, że dodanie jednej zmiennej znacząco wpłynęło na dopasowanie całego modelu - wszystkie parametry z tabeli uległy zmianie. Przede wszystkim, p-wartość w starym modelu jest przybliżana do 0, co za tym idzie $p-wartość < \alpha = 0.05$, a w nowym modelu $p-wartość = 0.393 > 0.05$, co oznaczałoby, że nie możemy odrzucić hipotezy zerowej, gdzie slope = 0, czyli X i Y są nieskorelowane. W starym modelu $R^2 = 0.96$, co oznacza, że 96% zmiennych X wyjaśniało zmienną Y, w nowym moodelu $R^2 = 0.017$, co wskazuje na bardzo słabe dopasowanie modelu. Bardzo dużą różnicę można zauważyć również w estymatorze $\sigma^2$, w modelu zmodyfikowanym wynosi ona aż $143.011$, co wskazuje na duże rozrzucenie zmiennych, natomiast dla starego modelu wynosi jedynie $8.914$. Obserwacja, która tak znacząco wpływa na statystyki rozkładu zwana jest **obserwacją wpłwową**, jeśli zauważamy taką obserwację w naszych danych powinniśmy się zastanowić skąd ona pochodzi i czy aby na pewno nie jest to błąd, ale żeby móc to stwierdzić musimy sprawdzić tę teorię u źródła.  
+
+__(b)__ Powtórzę podpunkty (b), (c) i (d) z zadania 3. na powyżej zmodyfikowanym zbiorze danych.
+
+
+```{r, echo = FALSE, fig.height = 3}
+e <- model2_n$residuals
+
+
+g1 <- ggplot(data = dane2_n)+
+  geom_point(aes(x = kopiarki, y = e), col = 'black') +
+  xlab("Liczba kopiarek") + ylab("Residua") +
+  ggtitle("Residua a liczba kopiarek") +
+  theme_minimal()
+
+
+g2 <- ggplot()+
+  geom_point(aes(x = 1:46, y = e), col = 'black') +
+  xlab("Kolejność") + ylab("Residua") +
+  ggtitle("Residua a kolejność danych") +
+  theme_minimal()
+
+
+grid.arrange(g1,g2, ncol = 2)
+```
+Z obu wykresów łatwo zauważyć obserwacje odstającą (wpływową), która jest oddalona od prostej y = 0 o ponad 800. Tak wyglądające wykresy residuów wskazywałyby na to, że model regresji nie radzi sobie dobrze z wyjaśnieniem lub przewidywaniem tej konkretnej obserwacji. Moglibyśmy się zastanawiać, czy pomiar został poprawnie przeprowadzony, takiej obserwacji nie możemy usunąć z danych, a jedynie zweryfikować jej poprawność u źródła pytając, czy były jakieś nietypowe okoliczności, które mogłyby wyjaśnić tę wartość odstającą.  
+
+```{r, echo = FALSE, message = FALSE, fig.height = 3.5, warning = FALSE}
+
+hist_plot <- ggplot(data.frame(residuals = e), aes(x = residuals)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 5, fill = "steelblue3", color = "black") +
+  labs(x = "Residua", y = "Gęstość", title = "Histogram residuów") +
+  theme_minimal()
+
+x_seq <- seq(min(e), max(e), length.out = 1000)
+y_density <- dnorm(x_seq, mean(e), sd(e))
+
+density_plot <- geom_line(data = data.frame(x = x_seq, y = y_density), aes(x, y), color = "red", linewidth = 1)
+
+
+qq_plot <- ggplot(data.frame(residuals = e), aes(sample = residuals)) +
+  geom_qq() +
+  geom_abline(intercept = mean(e), slope = sd(e), col = "red", linewidth = 1) +
+  labs(title = "Q-Q Plot") +
+  theme_minimal()
+
+
+grid.arrange(hist_plot + density_plot, qq_plot, ncol = 2)
+```
+Na histogramie można zaobserwować obserwcję obstającą na samym brzegu wykresu, na wyrkesie QQ również łatwo ją dostrzec - jest zdecydowanie oddalona od pozostałych danych. Wpływająca obserwacja wpłwa na teoretyczną prostą wyliczoną dla rozkładu normalnego, wobec czego dane nie pokrywają się z tą prostą. To samo stało się z histogramem - krzywa gęstości znaczącą część histogramu danych nie obejmuje. Z histogramu oraz wykresu kwantylo-kwantylowego można dojść do wniosku, że dane nie podchodzą z rozkładu normalnego.  
+
+__(c)__ Tym razem do początkowego pliku **ch01pr20.txt** dodam obserwację $(1000, 6)$ i sprawdzę podpunkty (a) i (b) z tego zadania.
+
+```{r}
+nowa_obserwacja_1 <- data.frame(czas = 1000, kopiarki = 6)
+dane2_n <- rbind(dane2, nowa_obserwacja_1)
+
+```
+
+```{r, echo = FALSE}
+model2_n <- lm(czas ~ kopiarki, dane2_n)
+
+summary_model2_n <- summary(model2_n)
+summary_model2 <- summary(model2)
+
+# Dopasowane równania regresji
+equations <- c(
+  paste("Y =", 
+        round(summary_model2_n$coefficients[1, "Estimate"], 3),
+        "+",
+        "X *",
+        round(summary_model2_n$coefficients[2, "Estimate"], 3)),
+  paste("Y =", 
+        round(summary_model2$coefficients[1, "Estimate"], 3),
+        "+",
+        "X *",
+        round(summary_model2$coefficients[2, "Estimate"], 3))
+)
+
+# T-test dla współczynnika nachylenia z p-wartością
+t_test_values <- c(
+  summary_model2_n$coefficients[2, c("t value")],
+  summary_model2$coefficients[2, c("t value")]
+)
+
+p_wartosc <- c(
+  summary_model2_n$coefficients[2, c("Pr(>|t|)")],
+  summary_model2$coefficients[2, c("Pr(>|t|)")]
+)
+
+# R-kwadrat
+r_squared <- c(
+  summary_model2_n$r.squared,
+  summary_model2$r.squared
+)
+
+# Estymator sigma^2 (residual standard error)
+sigma_squared <- c(
+  summary_model2_n$sigma,
+  summary_model2$sigma
+)
+
+# Tworzenie tabeli
+comparison_table <- data.frame(
+  Model = c("Zmodyfikowany model", "Stary model"),
+  `Dopasowane równanie regresji` = equations,
+
+  `p-wartość` = round(p_wartosc, 3),
+  `R-kwadrat` = round(as.numeric(r_squared),3),
+  `Estymator sigma^2` = round(as.numeric(sigma_squared),3),
+  row.names = NULL
+)
+
+# Wyświetlenie tabeli
+knitr::kable(comparison_table, align = "c")
+
+
+```
+
+Ponownie wszystkie paramtery zostały zmienione przed dodanie jednej obserwacji, co by oznaczało, że jest to **obserwacja wpływowa**. Wartość $R^2$ dla zmodyfikowanego modelu wynosi zaledwie $0.112$, co wskazuje na słabe dopasowanie mdoelu liniowego do danych. Wartość estymatora $\sigma^2$ również uległa dużej zmianie, wynika to z bardzo oddalonej jednej obserwacji od reszty danych. Ciekawie w tym zestawieniu wychodzi p-wartość, ponieważ jak i dla starego i dla zmodydikowanego modelu jest ona mniejsza od $\alpha = 0.05$, czyli w obu przypadkach na tym poziomie istotności możemy odrzucić hipotezę, że zmienne są nieskorelowane.
+
+
+```{r, echo = FALSE, fig.height = 3}
+e <- model2_n$residuals
+
+
+g1 <- ggplot(data = dane2_n)+
+  geom_point(aes(x = kopiarki, y = e), col = 'black') +
+  xlab("Liczba kopiarek") + ylab("Residua") +
+  ggtitle("Residua a liczba kopiarek") +
+  theme_minimal()
+
+
+g2 <- ggplot()+
+  geom_point(aes(x = 1:46, y = e), col = 'black') +
+  xlab("Kolejność") + ylab("Residua") +
+  ggtitle("Residua a kolejność danych") +
+  theme_minimal()
+
+
+grid.arrange(g1,g2, ncol = 2)
+```
+
+Na obu wykresach łatwo zauważyć obserwacje odstającą, jest ona wyraźnie pokazana u góry wykresów. Możemy zauważyć, że dla wykresu residuów dla liczby kopiarek obserwacja odstająca jest mniejwięcej w połowie wykresu, co sugeruje pewną regularność w występowaniu tego odstępstwa. Ten wykres oraz niska p-wartość tych danych oznacza,że obserwacja odstająca nie różni się istotnie od reszty danych. 
+
+
+```{r, echo = FALSE, message = FALSE, fig.height = 3.5, warning = FALSE}
+
+hist_plot <- ggplot(data.frame(residuals = e), aes(x = residuals)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 5, fill = "steelblue3", color = "black") +
+  labs(x = "Residua", y = "Gęstość", title = "Histogram residuów") +
+  theme_minimal()
+
+x_seq <- seq(min(e), max(e), length.out = 1000)
+y_density <- dnorm(x_seq, mean(e), sd(e))
+
+density_plot <- geom_line(data = data.frame(x = x_seq, y = y_density), aes(x, y), color = "red", linewidth = 1)
+
+
+qq_plot <- ggplot(data.frame(residuals = e), aes(sample = residuals)) +
+  geom_qq() +
+  geom_abline(intercept = mean(e), slope = sd(e), col = "red", linewidth = 1) +
+  labs(title = "Q-Q Plot") +
+  theme_minimal()
+
+
+grid.arrange(hist_plot + density_plot, qq_plot, ncol = 2)
+```
+
+Na histogramie oraz wykresie QQ łatwo dostrzec obserwację odstającą, w obu przypadkach znajduje się ona na brzegu wykresu. Tak jak w przypadku podpunktu (b) wpływa ona na teoretyczną krzywą gęstości rozkładu normalnego oraz teoretyczną prostą, wobec czego ani histogram, ani wykres kwantylo-kwantylowy się z nimi nie pokrywają. W związku z czym dochodzimy do wniosku, że dane nie pochodzą z rozkładu normalnego.
+
+
+## Zadanie 5
+
+W tym zadaniu zostaną wykorzystane dane z pliku **ch03pr15.txt** dotyczące stężenia roztworu. Zawierają wartości stężenia roztworu oraz czas.  
+
+__(a)__ Przeprowadzę regresję liniową z czasem jako zmienną objaśniającą i stężeniem roztworu jako zmienną odpowiedzi. Podam odpowiednie równanie regresji, przedstawię dane i prostą regresji na wykresie. Do wykresu dodam 95% przedział prdeykcyjny dla poszczególnych obserwacji.
+
+
+
+```{r, echo = FALSE}
+
+
+
+
+dane3 <- read.table("C:/Users/Madzia/Desktop/Modele liniowe/Raport 3/CH03PR15 (1).txt")
+colnames(dane3) <- c("stezenia", "czas")
+model3 <- lm(stezenia ~ czas, dane3)
+summ3 <- summary(model3)
+```
+Z podsumowania modelu można odczytać, że: 
+
+- $\hat\beta_1 =$ `r round(summ3$coefficients[2,1], 3)`
+- $\hat\beta_0 =$ `r round(summ3$coefficients[1,1], 3)`
+
+Zatem równanie regresji wygląda tak: $Y = -0.324 * X - 2.575$.  
+
+Dane oraz prosta regresji na wykresie wraz z 95% przedziałem predykcyjnym wyglądają tak:  
+```{r, echo = FALSE, fig.height = 3.5, warning = FALSE}
+new_data <- data.frame(czas = seq(min(dane3$czas), max(dane3$czas), length.out = 100))
+
+
+predictions <- predict(model3, newdata = new_data, interval = "prediction", level = 0.95)
+
+
+new_data <- cbind(new_data, predictions)
+
+
+ggplot() +
+  geom_point(data = dane3, aes(x = czas, y = stezenia)) +
+  geom_line(data = new_data, aes(x = czas, y = fit), color = "blue") +
+  geom_ribbon(data = new_data, aes(x = czas, ymin = lwr, ymax = upr), alpha = 0.3, fill = "blue") +
+  labs(x = "czas", y = "stezenia") +
+  ggtitle("Wykres danych z przedziałami predykcyjnymi (95%) dla regresji") +
+  theme_minimal()
+
+predictions <- predict(model3, interval = "prediction", level = 0.95)
+```
+
+Na wykresie można zauważyć, że obserwacje (punkty) mniejwięcej układają się tak, jak prosta regresji, niestety widać, że nie jest to najlepsze dopasowanie, bo żaden z punktów nawet nie pokrywa się z tą linią. Można więc szukać lepszego modelu do przewidywania na podstawie tych danych. Prasmo predykcyjne obejmuje wszystkie obserwacje, ale zarazem jest bardzo szerokie, co wskazuje na znaczną niepewność prognozowanego modelu w odniesieniu do rzeczywistych wartości. Powoduje to konieczność ostrożnego interpretowania wyników oraz dalszej analizy w celu poprawy skuteczności modelu.
+
+__(b)__ Podam wartość $R^2$ i wyniki testu istotności dla hipotezy zerowej, że stężenie roztworu nie zależy od czasu.
+
+```{r}
+summ3$r.squared
+
+```
+Współczynnik determinacji $R^2$ wynosi około $0.812$, co oznacza, że około $81.2%$ zmienności zmiennej zależnej można wyjaśnić za pomocą modelu regresji liniowej. Jest to dość wysoki wynik, co oznacza, że ten model regresji jest stosunkowo skuteczny w wyjaśnianiu zmienności danej zmiennej. 
+
+$$H_0:\ \beta_1 = 0\ \ \ vs \ \ \ H_1: \beta_1 \neq 0$$
+
+Odrzucamy hipotezę zerową wtedy, gdy $F > F_c = F^*(1-\alpha,1,n-2)$, gdzie $n = 15$, a $\alpha$ przyjmę $0.05$. Przeprowadzę teraz ten test.
+```{r}
+Fc <- qf(1-0.05, 1, 15-2)
+summ3$fstatistic[1] > Fc
+
+```
+Statystyka testowa F wyszła `r round(summ3$fstatistic[1])` ilosc stopni swobody wynosi $1$ i $13$, p-wartość `r summ3$coefficients[2, c("Pr(>|t|)")]`. Z przeprowadzonego wyżej testu można wywnioskować, że hipoteza zerowa zostałą odrzucona, co oznacza, że z 90% pewnością możemy stwierdzić, że zmienna objaśniana i objaśniająca są ze sobą skorelowane. Niska p-wartość również o tym świadczy, ponieważ jest zdecydowanie mniejsza od ustalonego poziomu istotności $\alpha = 0.05$.  
+
+__(c)__ Obliczę współczynnik korelacji między obserwowaną i przewidywaną wartością stężenia roztworu.
+
+```{r}
+
+cor(dane3$stezenia,data.frame(predictions)$fit)
+```
+Współczynnik korelacji między obserwowaną i przewidywaną wartością stężenia roztworu wynosi `r cor(dane3$stezenia,data.frame(predictions)$fit)`. Oznacza, to, że zależność między zmiennymi jest silna, czyli jeśli jedna zmienna rośnie, to bardzo prawdopodobne jest, że druga zmienna również wzrośnie.
+
+
+## Zadanie 6
+
+Użyję procedury Box'a-Cox'a, aby znaleźć odpwiednią transformację dla stężenia roztworu do danych użytych w poprzednim zadaniu.  
+Transormacja Boxa-Coxa umożliwia wybór optymalnego przekształcenia, dopasowuje ona do danych model postaci:
+$$f_{\lambda}(Y) = \tilde{Y} = \beta_0 + \beta_1X_i + \epsilon_i$$
+gdzie $\tilde{Y} = Y^{\lambda}$ lub $\tilde{Y} = (Y^{\lambda} - 1)/ \lambda$. Następnie przy użyciu metody największej wiarogodności estymuje optymalną wartość parametru $\lambda$.
+
+
+```{r, fig.height = 3}
+bc <- boxcox(model3)
+(lambda <- bc$x[which.max(bc$y)])
+
+```
+Procedura Boxa-Coxa jest używana do znalezienia optymalnej transformacji danych, aby lepiej spełniać zalożenia regresji liniowej. Polecenie **boxcox()** zwraca wykres wartoścy kryterium Boxa-Coxa dla różnych potencjalnych transformacji parametru (lambda), który odpowiada za różne rodzaje transormacji danych. Optymalną wartością lambda jest taki x, dla którego wartość y na wykresie jest największa, w przypadku naszych danych ten wynik to `r bc$x[which.max(bc$y)]`. Sugerowana wartość lambda przez tę procedurę może być stosowana jako potęga do której dane będą podnoszone, aby uzyskać liniową zależność danych. W tym przypadku sugerowana transformacja jest zbliżona do logarytmicznej.
+
+## Zadanie 7
+W tym zadaniu będę używać danych tych samych, co w poprzednich dwóch zadaniach.  
+
+__(a)__ Utworzę nową zmienną odpowiedzi, biorąc logarytm stężenia roztworu.
+
+```{r, echo = FALSE}
+log_stezenie <- log(dane3$stezenia)
+dane4 <- dane3
+dane4[,1] <- log_stezenie
+lm4 <- lm(log_stezenie ~ czas,dane4)
+summ4 <- summary(lm4)
+```
+Z podsumowania modelu można odczytać, że: 
+
+- $\hat\beta_1 =$ `r round(summ4$coefficients[2,1], 3)`
+- $\hat\beta_0 =$ `r round(summ4$coefficients[1,1], 3)`
+
+Zatem równanie regresji wygląda tak: $\tilde{Y} = log(Y) = -0.45 * X - 1.508$.  
+
+__(b)__ Powtórzę zadanie 5. z $\tilde{Y}$ jako zmienną odpowiedzi i czasem jako zmienną objaśniającą ($\tilde{Y}$ ~ time)
+
+```{r, echo = FALSE, fig.height = 3.5, warning = FALSE}
+new_data <- data.frame(czas = seq(min(dane4$czas), max(dane4$czas), length.out = 100))
+
+
+predictions <- predict(lm4, newdata = new_data, interval = "prediction", level = 0.95)
+
+
+new_data <- cbind(new_data, predictions)
+
+
+ggplot() +
+  geom_point(data = dane3, aes(x = czas, y = log_stezenie)) +
+  geom_line(data = new_data, aes(x = czas, y = fit), color = "blue") +
+  geom_ribbon(data = new_data, aes(x = czas, ymin = lwr, ymax = upr), alpha = 0.3, fill = "blue") +
+  labs(x = "czas", y = "log(stezenia)") +
+  ggtitle("Wykres danych z przedziałami predykcyjnymi (95%) dla regresji") +
+  theme_minimal()
+predictions <- predict(lm4, interval = "prediction", level = 0.95)
+```
+
+
+```{r, echo = FALSE}
+dane_ramka <- data.frame(
+  R_2 = round(summ4$r.squared,3),
+  F_statistic = round(summ4$fstatistic[1],3),
+  Fc = round(qf(1-0.05, 1, 15-2),3),
+  Ffc = summ4$fstatistic[1] > qf(1-0.05, 1, 15-2),
+  Korelacja = round(cor(dane4$stezenia, data.frame(predictions)$fit),3)
+)
+
+colnames(dane_ramka)[colnames(dane_ramka) == "Ffc"] <- "F > Fc"
+row.names(dane_ramka) = "wartość"
+knitr:: kable(dane_ramka)
+```
+Z wykresu możemy odczytać, że wszystkie punkty zawierają się w 95% paśmie predykcyjnym oraz jest dużo węższy niż w zadaniu 5., czyli model ma dobrą zdolność do przewidywania i jest wiarygodny. Potwierdza to również bardzo wysoki współczynnik determinacji, ponieważ wynosi on $R^2 = 0.99$, czyli 99% danych jest wyjaśnianych przez model. Dla hipotezy, że zmienne są niezależne (hipoteza zerowa: $\beta_1 = 0$) została policzona statystyka F oraz wartość krytyczna Fc dla tego testu na poziomie ufności 95%, wynik tego testu jest w kolumnie `F > Fc`. Oznacza to, że z 95% pewnością możemy odrzucić tę hipotezę i uznać, że zmienne są zależne. Współczynnik korelacji między obserwowaną i przewidywaną wartością stężenia również wyszedł bardzo wysoki, bliski 1. 
+
+__(c)__ Na wykresie przedstawię stężenie roztworu względem czasu. Dodam krzywą regresji i pasmo dla 95% przedziałów predykcji na podstawie wyników uzyskanych w punkcie (b). Porównam z wykresem uzyskanym w zadaniu 5.
+
+
+```{r, fig.height = 3.5, echo = FALSE}
+dane5 <- data.frame(czas = dane3$czas, stezenie=log(dane3$stezenia))
+model5 <- lm(stezenie ~ czas, dane5)
+p1 <- data.frame(predict(model5,
+                         newdata = data.frame(czas = seq(1, 9, 0.5)),
+                         interval = "prediction"),
+                 czas = seq(1, 9, 0.5))
+datlog6 <- dane5
+datlog6$stezenie <- exp(datlog6$stezenie)
+p1$lwr <- exp(p1$lwr)
+p1$upr <- exp(p1$upr)
+p1$fit <- exp(p1$fit)
+
+ggplot(datlog6, aes(x = czas, y = stezenie)) +
+  geom_point() +
+  geom_line(p1, mapping = aes(x = czas, y = fit), col = "blue") +
+  geom_ribbon(p1,
+              mapping = aes(ymin = lwr, max = upr, x = czas, y = fit), fill = 'blue',
+              alpha = 0.4)+
+  xlab("Czas") +
+  ylab("Stężenie") +
+  theme_minimal()
+
+
+```
+Porównując wykres z wykresem z zadania 5. można zauważyć, że krzywa dopasowania jest o wiele lepiej dopasowana do danych. To znaczy, że znajduje się bliżej puktów na wykresie i bardziej przypomina linie łączącą te punkty. Pasmo predykcyjne również jest węższe, co wskazuje na lepsze dopasowanie.
+
+__(d)__ Obliczę współczynnik korelacji między obserwowanym, a przewidywanym stężeniem roztworu opartym na modelu z punktu (b) i porównam z odpowiednim wynikiem z zadania 5.
+
+```{r}
+
+cor(exp(data.frame(predictions)$fit), datlog6$stezenie)
+```
+Korelacja wyszła wyższa niż w zadaniu 5., co wskazuje na lepsze dopasowanie modelu do danych.
+
+## Zadanie 8
+Używajac danych z zadania 5. skonstruuję nową zmienną objaśnijącą 
+$\tilde{t} = time^{-1/2}$. Powtórzę zadanie 7., używając modelu regresji ze stężeniem roztworu jako zmienną odpowiedzi i $\tilde{t}$ jako zmienną objaśniającą ($Y$ ~ $\tilde{t}$). Podsumuję wyniki.  
+
+```{r, echo = FALSE}
+nowy_czas <- (dane3$czas)^(-1/2)
+dane7 <- dane3
+dane7[,2] <- nowy_czas
+lm7 <- lm(stezenia ~ nowy_czas,dane7)
+summ7 <- summary(lm7)
+```
+Z podsumowania modelu można odczytać, że: 
+
+- $\hat\beta_1 =$ `r round(summ7$coefficients[2,1], 3)`
+- $\hat\beta_0 =$ `r round(summ7$coefficients[1,1], 3)`
+
+Zatem równanie regresji wygląda tak: $\tilde{Y} = 4.196 * X - 1.341$.  
+
+
+```{r, echo = FALSE, fig.height = 3.5, warning = FALSE}
+
+
+predictions <- predict(lm7, newdata = new_data, interval = "prediction", level = 0.95)
+
+
+new_data <- cbind(dane7, predictions)
+
+
+g1 <- ggplot() +
+  geom_point(data = dane7, aes(x = czas, y = stezenia)) +
+  geom_line(data = new_data, aes(x = czas, y = fit), color = "blue") +
+  geom_ribbon(data = new_data, aes(x = czas, ymin = lwr, ymax = upr), alpha = 0.3, fill = "blue") +
+  labs(x = "czas^(-1/2)", y = "stezenia") +
+  theme_minimal()
+predictions <- predict(lm4, interval = "prediction", level = 0.95)
+
+
+
+data12  <- data.frame(czas12 = 1/sqrt(dane3$czas), stezenie = dane3$stezenia)
+model12 <- lm(stezenie~czas12, data12)
+stezenie12 <- data12$stezenie
+czas12 <- data12$czas12
+
+pred12 <- data.frame(predict(model12,
+                             newdata = data.frame(stezenie12),
+                             interval = "prediction",
+                             level = 0.95),
+                     stezenie12)
+
+p1 <- data.frame(predict(model12,
+                         newdata = data.frame(czas12 = seq(0.3333, 1, .001)),
+                         interval = "prediction"),
+                 czas12 = 1/seq(0.3333, 1, .001)^2)
+
+datsqrt11 <- data12
+datsqrt11$czas12 <- 1/(datsqrt11$czas12^2)
+g2 <- ggplot(datsqrt11, aes(x = czas12, y = stezenie)) +
+  geom_point() + 
+  geom_line(p1, mapping = aes(x = czas12, y = fit), col = "blue") +
+  geom_ribbon(p1,
+              mapping = aes(ymin = lwr, ymax = upr,
+                            x = czas12, y = fit), fill = 'blue',
+              alpha = 0.4) +
+  xlab("Czas") +
+  ylab("Stężenie") +
+  theme_minimal()
+
+plot_grid(g1,g2, ncol = 2)
+```
+
+
+```{r, echo = FALSE}
+dane_ramka <- data.frame(
+  R_2 = round(summ7$r.squared,3),
+  F_statistic = round(summ7$fstatistic[1],3),
+  Fc = round(qf(1-0.05, 1, 15-2),3),
+  Ffc = summ7$fstatistic[1] > qf(1-0.05, 1, 15-2),
+  Korelacja = round(cor(dane7$stezenia, data.frame(predictions)$fit),3),
+  Korelacja2 =  0.994
+
+ 
+)
+colnames(dane_ramka)[colnames(dane_ramka) == "Ffc"] <- "F > Fc"
+
+
+row.names(dane_ramka) = "wartość"
+knitr:: kable(dane_ramka)
+```
+
+Przedziały predykcyjne, choć zawierają wszystkie obserwacje, są szersze niż w przypadku gdy $\tilde{Y} = log(Y)$. Proste regresji również przechodzącą przez większą ilość punktów, co wskazywałoby na odpowiednie dopasowanie modelu. Wartość $R^2 = 0.988$ oznacza, że 98% danych jest wyjaśnone przez model, co jest wysokim wynikiem. Test istotności dla slope'a utwierdza nas w tym, że zmienne są zależne. Z wysokiego poziomu korelacji w obu przypadkach możemy wnioskować i pozostałych wartości statystyk możemy wnioskować, że ten model jest dobrze dopasowany do naszych danych.  
+  
+Porównując szerokości przedziałów predykcyjnych, odległość prostych liniowych od punktów oraz statystyki przedstawionych w tabelce można stwierdzić, że $\tilde{Y} = log(Y)$ jest lepszym wyborem przekształcenia zmiennej $Y$. Ponadto zastosowanie metody Boxa-Coxa również wskazało to przekształcenie. 
+
+
+
+
+
+
+## Zadania teoretyczne 
+
+
+```{r}
+#1a
+(tc <- qt(1 - 0.05/2,df=  c(5,10,15)))
+
+#1b
+(Fc <- qf(1 - 0.05,df1 = 1,df2=  c(5,10,15)))
+#1c
+tc^2
+#jak widać tc^2 = Fc, wynika to z tego, że zmienna jeśli X ~ t-student(df = n), to X^2 ~ F(1, n)
+
+#2a
+#dfe = n-2 = 20 -> n = 22
+
+#2b
+#dfE = 20
+#SSE = 400
+#MSE = SSE/dfE = s^2 -> s = sqrt(SSE/dfE)
+(s <- sqrt(400/20))
+
+#2c
+#odrzucamy H_0 gdy MSM/MSE > Fc
+# MSM = SSM/dfM = 100/1
+# MSE = SSE/dfE = 400/20
+MSM <- 100
+MSE <- 400/20
+MSM/MSE > qf(1 - 0.05, 1, 20)
+#zatem odrzucamy hipoteze zerowa o rownosci srednich grup na poziomie istotnosci 0.05, statystyka F = 5 > Fc = 4.351244
+
+#2d
+
+#wsp determinacji R^2 mowi jaka czesc calkowitej zmiennosci w wektorze Y stanowi zmiennosc wyjasniona przez model
+#R^2 = SSM/SST = 1 - SSE/SST = 1 - SSE/(SSM + SSE)
+R2 <- 1 - 400/(100+400)
+#model wyjasnia 20% zmiennych objasniajacych
+
+#2e
+(corr <- sqrt(R2))
+#nieski współczynnik wskazuje na słabą korelację
+```
